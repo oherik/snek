@@ -14,11 +14,11 @@ import se.cygni.snake.api.response.PlayerRegistered;
 import se.cygni.snake.api.util.GameSettingsUtils;
 import se.cygni.snake.client.AnsiPrinter;
 import se.cygni.snake.client.BaseSnakeClient;
+import se.cygni.snake.client.MapCoordinate;
 import se.cygni.snake.client.MapUtil;
+import se.cygni.snake.utils.astar;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 public class SimpleSnakePlayer extends BaseSnakeClient {
 
@@ -32,11 +32,13 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
     private static  final int SERVER_PORT = 80;
 
     private static final GameMode GAME_MODE = GameMode.TRAINING;
-    private static final String SNAKE_NAME = "The Simple Snake";
+    private static final String SNAKE_NAME = "Snek";
 
     // Set to false if you don't want the game world printed every game tick.
     private static final boolean ANSI_PRINTER_ACTIVE = false;
     private AnsiPrinter ansiPrinter = new AnsiPrinter(ANSI_PRINTER_ACTIVE, true);
+
+
 
     public static void main(String[] args) {
         SimpleSnakePlayer simpleSnakePlayer = new SimpleSnakePlayer();
@@ -89,15 +91,81 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
                 directions.add(direction);
             }
         }
-        Random r = new Random();
-        SnakeDirection chosenDirection = SnakeDirection.DOWN;
 
-        // Choose a random direction
-        if (!directions.isEmpty())
-            chosenDirection = directions.get(r.nextInt(directions.size()));
+        //Lets find food
+        MapCoordinate[] foodTiles = mapUtil.listCoordinatesContainingFood();
+        List<MapCoordinate> foodTileList = new LinkedList();
+        for(MapCoordinate mc : foodTiles){
+            foodTileList.add(mc);
+        }
+
+        MapCoordinate current = mapUtil.getMyPosition();
+
+        Collections.sort(foodTileList, new Comparator<MapCoordinate>() {
+            public int compare(MapCoordinate left, MapCoordinate right) {
+                return Integer.compare(left.getManhattanDistanceTo(current), right.getManhattanDistanceTo(current));
+            }
+        });
+
+        SnakeDirection  chosenDirection;
+
+        if(foodTiles.length > 0){
+            //First food;
+
+            MapCoordinate foodTile = foodTileList.get(0);
+           // System.out.println("Current:      " +current);
+          //  System.out.println("Food:      " +foodTile);
+            ArrayList<MapCoordinate> path = astar.getPath(current, foodTile, mapUtil);
+            if(path == null){
+                Random r = new Random();
+                chosenDirection = SnakeDirection.DOWN;
+                // Choose a random direction
+                if (!directions.isEmpty())
+                    chosenDirection = directions.get(r.nextInt(directions.size()));
+
+
+            } else {
+                MapCoordinate goTo = path.get(path.size()-2);
+
+                //System.out.println("path:      " +path);
+
+                int dY = goTo.y - current.y;
+                int dX = goTo.x - current.x;
+                chosenDirection = getDirection(dX,dY);
+                int i = 1;
+            }
+
+
+        } else {
+            Random r = new Random();
+            chosenDirection = SnakeDirection.DOWN;
+            // Choose a random direction
+            if (!directions.isEmpty())
+                chosenDirection = directions.get(r.nextInt(directions.size()));
+        }
 
         // Register action here!
         registerMove(mapUpdateEvent.getGameTick(), chosenDirection);
+    }
+
+    public SnakeDirection getDirection(int dX, int dY){
+        if(dX == 0){
+            if(dY == -1){
+                return SnakeDirection.UP;
+            }
+            if(dY == 1){
+                return SnakeDirection.DOWN;
+            }
+        }
+        if(dY == 0){
+            if(dX == -1){
+                return SnakeDirection.LEFT;
+            }
+            if(dX == 1){
+                return SnakeDirection.RIGHT;
+            }
+        }
+        return null;
     }
 
 
