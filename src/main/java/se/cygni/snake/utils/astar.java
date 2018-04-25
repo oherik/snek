@@ -2,10 +2,13 @@ package se.cygni.snake.utils;
 import org.omg.CORBA.INTERNAL;
 import se.cygni.snake.client.MapCoordinate;
 import se.cygni.snake.client.MapUtil;
+import se.cygni.snake.utils.utils;
 
 import java.awt.*;
 import java.util.*;
 import java.util.List;
+
+import static se.cygni.snake.utils.utils.*;
 
 public class astar {
     static HashMap<MapCoordinate, Integer> fScore;
@@ -15,16 +18,16 @@ public class astar {
     /** The start function for calculating the shortest path between two points on the map, with no limitations of number of steps.
      */
 
-    public static ArrayList<MapCoordinate> getPath(MapCoordinate startPos, MapCoordinate endPos, MapUtil mapUtil)
-            throws NullPointerException, IndexOutOfBoundsException {
-        return getPath(startPos, endPos, mapUtil, Integer.MAX_VALUE);
-    }
+    //public static ArrayList<MapCoordinate> getPath(MapCoordinate startPos, MapCoordinate endPos, MapUtil mapUtil)
+    //        throws NullPointerException, IndexOutOfBoundsException {
+    //    return getPath(startPos, endPos, mapUtil, Integer.MAX_VALUE, 0);
+   // }
 
     /** The start function for calculating the shortest path between two points on the map, a maximum number of steps included
      * @throws IndexOutOfBoundsException if the start or end position is negative
      * @throws  NullPointerException    if either of the points is null
      */
-    public static ArrayList<MapCoordinate> getPath(MapCoordinate startPos, MapCoordinate endPos, MapUtil mapUtil, int maxCost)
+    public static ArrayList<MapCoordinate> getPath(MapCoordinate startPos, MapCoordinate endPos, MapUtil mapUtil, int maxCost, int initialPathLength, List<MapCoordinate> forbiddenTiles, List<MapCoordinate> allowedTiles, String playerID)
             throws NullPointerException, IndexOutOfBoundsException {
         if (mapUtil == null)
             throw new NullPointerException("PathAlgorithm: the navigational mesh cannot be null");
@@ -33,7 +36,7 @@ public class astar {
             singlePointArray.add(endPos);
             return singlePointArray;
         }
-        return calculatePath(startPos,endPos,mapUtil,maxCost);
+        return calculatePath(startPos,endPos,mapUtil,maxCost, initialPathLength, forbiddenTiles,  allowedTiles, playerID);
     }
 
     /**
@@ -42,7 +45,7 @@ public class astar {
      * @return the shortest path or, if none found, null
      */
 
-    private static ArrayList<MapCoordinate> calculatePath(MapCoordinate startPos, MapCoordinate endPos,MapUtil mapUtil, int maxCost) {
+    private static ArrayList<MapCoordinate> calculatePath(MapCoordinate startPos, MapCoordinate endPos,MapUtil mapUtil, int maxCost, int initialPathLength, List<MapCoordinate> forbiddenTiles, List<MapCoordinate> allowedTiles, String playerID) {
         HashSet<MapCoordinate> closedSet = new HashSet<>();
         Queue<MapCoordinate> openSet = new PriorityQueue<>(coordinateComparator);
         openSet.add(startPos);
@@ -61,18 +64,18 @@ public class astar {
                 return reconstructPath(cameFrom, currentPos);
             }
             closedSet.add(currentPos);
-            gScore.putIfAbsent(currentPos, LARGE);
+           // gScore.putIfAbsent(currentPos, LARGE);
 
-            for(MapCoordinate neighbor : getWalkableNeighbors(currentPos, mapUtil)){
+            for(MapCoordinate neighbor : getWalkableNeighbors(currentPos, playerID, mapUtil, getGScore(currentPos) + initialPathLength, forbiddenTiles, allowedTiles)){
                 if(!closedSet.contains(neighbor)) {
                     if (!openSet.contains(neighbor)) {
                         openSet.add(neighbor);
                     }
-                    gScore.putIfAbsent(neighbor, LARGE);
+                    //gScore.putIfAbsent(neighbor, LARGE);
 
-                    int tent_g = gScore.get(currentPos) + distanceBetween(currentPos, neighbor);
+                    int tent_g = getGScore(currentPos) + 1;//;.get(currentPos) + 1;//distanceBetween(currentPos, neighbor);
 
-                    if (tent_g < gScore.get(neighbor)) {
+                    if (tent_g < getGScore(neighbor) && tent_g <= maxCost){//{.get(neighbor)) {
                         cameFrom.put(neighbor, currentPos);
                         gScore.put(neighbor, tent_g);
                         fScore.put(neighbor, tent_g + neighbor.getManhattanDistanceTo(endPos));
@@ -87,20 +90,9 @@ public class astar {
         return null;
     }//calculatePath
 
-    private static List<MapCoordinate> getWalkableNeighbors(MapCoordinate current, MapUtil mapUtil){
-        List<MapCoordinate> neighbors = new ArrayList<>(4);
-        MapCoordinate[] allNeighbors = new MapCoordinate[4];
-        allNeighbors[0] = current.translateBy(0,1);
-        allNeighbors[1] = current.translateBy(1,0);
-        allNeighbors[2] = current.translateBy(0,-1);
-        allNeighbors[3] = current.translateBy(-1,0);
-        for(MapCoordinate coordinate : allNeighbors){
-            if(mapUtil.isTileAvailableForMovementTo(coordinate)){
-                neighbors.add(coordinate);
-            }
-        }
-        return neighbors;
-
+    private static int getGScore(MapCoordinate coordinate){
+        gScore.putIfAbsent(coordinate, LARGE);
+        return gScore.get(coordinate);
     }
 
     private static int distanceBetween(MapCoordinate start, MapCoordinate next) {
