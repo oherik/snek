@@ -1,10 +1,7 @@
 package se.cygni.snake.utils;
 
 import se.cygni.snake.api.event.MapUpdateEvent;
-import se.cygni.snake.api.model.MapSnakeBody;
-import se.cygni.snake.api.model.MapSnakeHead;
-import se.cygni.snake.api.model.SnakeDirection;
-import se.cygni.snake.api.model.TileContent;
+import se.cygni.snake.api.model.*;
 import se.cygni.snake.client.MapCoordinate;
 import se.cygni.snake.client.MapUtil;
 
@@ -22,16 +19,26 @@ public class utils {
         if(forbiddenTiles != null && forbiddenTiles.contains(coordinate)){
             return false;
         }
+        if(allowedTiles != null && allowedTiles.contains(coordinate) && util.getTileAt(coordinate).getContent().equals("snakebody") &&  (((MapSnakeBody) util.getTileAt(coordinate)).isTail())) {
+            return true; // Temp just for tail
+        }
 
 
       //  String content = util.getTileAt(coordinate).getContent();
-        if( distanceToCoordinate < 3) { //Så man inte kör in i fiendehuvud
+     //   if( distanceToCoordinate < 3) { //Så man inte kör in i fiendehuvud
            // List<MapCoordinate> neighbors = new ArrayList<>(4);
-            MapCoordinate[] allNeighbors = new MapCoordinate[4];
+
+
+
+            MapCoordinate[] allNeighbors = new MapCoordinate[8];
             allNeighbors[0] = coordinate.translateBy(0,1);
             allNeighbors[1] = coordinate.translateBy(1,0);
             allNeighbors[2] = coordinate.translateBy(0,-1);
             allNeighbors[3] = coordinate.translateBy(-1,0);
+            allNeighbors[4] = coordinate.translateBy(-1,1);
+            allNeighbors[5] = coordinate.translateBy(1,1);
+            allNeighbors[6] = coordinate.translateBy(1,-1);
+            allNeighbors[7] = coordinate.translateBy(-1,1);
             for(MapCoordinate coord : allNeighbors){
                 if(!util.isCoordinateOutOfBounds(coord)){
                     String cont = util.getTileAt(coord).getContent();
@@ -41,7 +48,9 @@ public class utils {
                 }
 
             }
-        }
+      //  }
+
+
 
         return util.isTileAvailableForMovementTo(coordinate);
 
@@ -82,6 +91,9 @@ public class utils {
     }
 
     public static MapCoordinate getNeighbor(MapCoordinate current, SnakeDirection direction){
+        if(current  == null || direction == null){
+            return null;
+        }
         switch(direction){
             case UP:
                 return current.translateBy(0,-1);

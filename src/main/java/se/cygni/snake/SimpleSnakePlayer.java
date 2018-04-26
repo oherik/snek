@@ -16,9 +16,7 @@ import se.cygni.snake.client.MapUtil;
 import se.cygni.snake.utils.astar;
 import se.cygni.snake.utils.utils;
 
-import java.lang.reflect.Array;
 import java.util.*;
-import java.util.Map;
 
 public class SimpleSnakePlayer extends BaseSnakeClient {
 
@@ -80,12 +78,17 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
     }
 
     final int maxSelfFoodSearchCost = 40;
-    final int maxPathToOwnTailCost = 60;
+    final int maxPathToOwnTailCost = 300;
     final int maxOthersFoodSearchCost = 40;
     final int maxPathExtensions = 200;
-    final int maxFloodDepth = 8;
-    final int sneakHeadPenaltyInFloodFill = 0; //TODO implementera detta :)
-    final int edgePenaltyInFloodFill = 0; //TODO testa detta :D
+    final int maxFloodDepth = 200; //eller 400
+    final int maxSafeSearchFloodDepth = 40;
+    final int maxHuntTailCost = 150;
+    final int foodRewardFloodFill = 0; //Dessa kanske kan sättas till 0
+    final int sneakHeadPenaltyInFloodFill = 10; //TODO implementera detta :)
+    final int edgePenaltyInFloodFill = 2; //TODO testa detta :D
+    final int huntPreference = 1; // TODO denna kan tweakas
+    final int hamiltonCutoff = 5; // needs to be >= 1
 
     public SnakeDirection huntHead(MapUtil mapUtil, MapUpdateEvent mapUpdateEvent){
         MapCoordinate current = mapUtil.getMyPosition();
@@ -96,24 +99,22 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
         SnakeDirection currentDir = getDirection(dX,dY);
 
 
-        //Kolla om snett bakom! Isf DÖDA! :D :D :D :D
+        //TODO Kolla om snett bakom! Isf DÖDA! :D :D :D :D
 
 
         return null;
     }
 
 
-    public SnakeDirection huntTails(MapUtil mapUtil){
-        return null;
-    }
+
 
     public SnakeDirection survive(MapUtil mapUtil, MapUpdateEvent mapUpdateEvent){
 
         //Shortest to tail
         //Extend
         MapCoordinate current = mapUtil.getMyPosition();
-        ArrayList<MapCoordinate> longestPath =getLongestPathToTail(mapUpdateEvent, mapUtil);
-        if(longestPath != null && longestPath.size() > 1){
+        ArrayList<MapCoordinate> longestPath = getLongestPathToSafePlace(mapUpdateEvent, mapUtil);
+        if(longestPath != null && longestPath.size() > hamiltonCutoff){
             MapCoordinate goTo = longestPath.get(longestPath.size()-2); //TODO var -2
             System.out.println("#Hamilton");
             SnakeDirection chosen =  utils.getDirectionToNeighbor(current,goTo);
@@ -160,8 +161,8 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
             if(directions.size() == 2){
                 MapCoordinate aNieghbor = utils.getNeighbor(current, directions.get(0));
                 MapCoordinate bNeighbor = utils.getNeighbor(current, directions.get(1));
-                int aAreaSize = floodedSize(aNieghbor,mapUtil, mapUpdateEvent.getReceivingPlayerId());
-                int bAreaSize = floodedSize(bNeighbor, mapUtil, mapUpdateEvent.getReceivingPlayerId());
+                int aAreaSize = floodedSize(aNieghbor,mapUtil, maxFloodDepth);
+                int bAreaSize = floodedSize(bNeighbor, mapUtil, maxFloodDepth);
                 System.out.println("Fllood! a : " + aAreaSize + "  b: " +bAreaSize);
                 return aAreaSize > bAreaSize ?  directions.get(0) : directions.get(1);
             }
@@ -170,9 +171,9 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
                 MapCoordinate bNeighbor = utils.getNeighbor(current, directions.get(1));
                 MapCoordinate cNeighbor = utils.getNeighbor(current, directions.get(2));
                 HashMap<SnakeDirection, Integer> floodSize = new HashMap<>();
-                floodSize.put(directions.get(0),  floodedSize(aNieghbor,mapUtil, mapUpdateEvent.getReceivingPlayerId()));
-                floodSize.put(directions.get(1),  floodedSize(bNeighbor,mapUtil, mapUpdateEvent.getReceivingPlayerId()));
-                floodSize.put(directions.get(2),  floodedSize(cNeighbor,mapUtil, mapUpdateEvent.getReceivingPlayerId()));
+                floodSize.put(directions.get(0),  floodedSize(aNieghbor,mapUtil, maxFloodDepth));
+                floodSize.put(directions.get(1),  floodedSize(bNeighbor,mapUtil, maxFloodDepth));
+                floodSize.put(directions.get(2),  floodedSize(cNeighbor,mapUtil, maxFloodDepth));
 
                 System.out.println("Fllood! hashapen : " + floodSize );
                 SnakeDirection chose =  floodSize.entrySet().stream().max((entry1, entry2) -> entry1.getValue() > entry2.getValue() ? 1 : -1).get().getKey();
@@ -188,7 +189,7 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
        // System.out.println("#Rrandom");
         return goRandom(mapUtil);
 
-        //None? Fuck. Go as far away from the closest food as possible
+        //None? Go to a place with empty space
         //Or an obstacle right in front of you? Floodfill both sides.
         // Or heuristic? Just check number of free cells up, left, right
 
@@ -216,7 +217,139 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
     private String floodedPlayerId;
     private MapUtil floodedMapUtil;
 
-    public int floodedSize(MapCoordinate start, MapUtil mapUtil, String playerID){
+    public ArrayList<MapCoordinate> getPathToSafePlace(MapUpdateEvent mapUpdateEvent, MapUtil mapUtil, MapCoordinate current, int initialPathLength, List<MapCoordinate> forbiddenTiles){
+        if(safeSpot == null){
+            ArrayList<MapCoordinate> safe = getGoodPositions(mapUpdateEvent, mapUtil);
+
+            Collections.sort(safe, new Comparator<MapCoordinate>() {
+                public int compare(MapCoordinate left, MapCoordinate right) {
+                    return Integer.compare(floodedSize(right, mapUtil, maxSafeSearchFloodDepth),floodedSize(left, mapUtil, maxSafeSearchFloodDepth));
+                }
+            });
+
+            ArrayList<MapCoordinate> tempPath;
+            for(MapCoordinate mc : safe){
+                tempPath = astar.getPath(current,mc,mapUtil,maxPathToOwnTailCost,initialPathLength,forbiddenTiles,null, mapUpdateEvent.getReceivingPlayerId());
+                if(tempPath != null && tempPath.size() > 1){
+                    safeSpot = mc;
+                    return tempPath;
+                }
+            }
+        }
+        else{
+            return astar.getPath(current,safeSpot,mapUtil,maxPathToOwnTailCost,0,null,null, mapUpdateEvent.getReceivingPlayerId());
+        }
+
+
+
+return null;
+
+    }
+
+    public ArrayList<MapCoordinate> getGoodPositions(MapUpdateEvent mapUpdateEvent, MapUtil mapUtil){
+        ArrayList safePosition = getSafePositions(mapUpdateEvent, mapUtil);
+        int sizen = safePosition.size();
+        ArrayList goodPositions = new ArrayList();
+        goodPositions.add(safePosition.get(sizen/2));
+        goodPositions.add(safePosition.get(sizen/4));
+        goodPositions.add(safePosition.get(sizen/4+sizen/2));
+        goodPositions.add(safePosition.get(sizen/8));
+        goodPositions.add(safePosition.get(sizen/8 + sizen/ 2));
+        goodPositions.add(safePosition.get(sizen/8 +  sizen/4 +sizen/ 2));
+        goodPositions.add(safePosition.get(sizen/16 ));
+        goodPositions.add(safePosition.get(sizen/8 + sizen/ 16));
+        goodPositions.add(safePosition.get(sizen/8 +  sizen/16 +sizen/ 4));
+        goodPositions.add(safePosition.get(sizen/8 +  sizen/16 +sizen/ 4 + sizen/2));
+        goodPositions.add(safePosition.get(sizen/8));
+        goodPositions.add(safePosition.get(sizen-1));
+        Iterator<MapCoordinate> iter = goodPositions.iterator();
+       MapCoordinate temp;
+       while(iter.hasNext()) {
+           temp = iter.next();
+           int size = floodedSize(temp, mapUtil, 20);
+           if (size < 20) {
+               iter.remove();
+           }
+
+
+       }
+
+
+        return goodPositions;
+
+        //TODO factor in food and stuff :)
+    }
+
+
+    public ArrayList<MapCoordinate> getSafePositions(MapUpdateEvent mapUpdateEvent, MapUtil mapUtil){
+
+        int[] allpos = new int[mapUpdateEvent.getMap().getHeight()*mapUpdateEvent.getMap().getHeight()];
+        int[] obstacles = mapUpdateEvent.getMap().getObstaclePositions();
+        ArrayList<MapCoordinate> safePos =  new ArrayList();
+        int i = 0;
+
+        List obstacleList = Arrays.asList(obstacles);
+        for(int pos : allpos) {
+            if (!obstacleList.contains(pos)) {
+                safePos.add(mapUtil.translatePosition(pos));
+            }
+        }
+        return safePos;
+
+
+
+
+
+    }
+
+    public int floodedSize(MapCoordinate start, MapUtil mapUtil, int maxDepth){
+        HashMap<MapCoordinate, Boolean> visited = new HashMap<>(300);
+        Deque<MapCoordinate> queue = new ArrayDeque();
+
+        int penalty = 0;
+
+        visited.put(start, true);
+        queue.add(start);
+        int depth = 0;
+        while (!queue.isEmpty() && depth < maxDepth) {
+            MapCoordinate current = queue.pop();
+            MapCoordinate[] neighbors = new MapCoordinate[4];
+            neighbors[0] = utils.getNeighbor(current, SnakeDirection.DOWN);
+            neighbors[1] = utils.getNeighbor(current, SnakeDirection.RIGHT);
+            neighbors[2] = utils.getNeighbor(current, SnakeDirection.UP);
+            neighbors[3] = utils.getNeighbor(current, SnakeDirection.LEFT);
+
+            for(MapCoordinate neighbor : neighbors){
+                if(!visited.containsKey(neighbor)) {
+                    if (mapUtil.isTileAvailableForMovementTo(neighbor)) {
+                        visited.put(neighbor, true);
+                        queue.add(neighbor);
+                        if (mapUtil.getTileAt(current).getContent().equals("food")) {
+                            penalty -= foodRewardFloodFill;
+                        }
+
+                    } else {
+                        if (mapUtil.isCoordinateOutOfBounds(current)) {
+                            penalty += edgePenaltyInFloodFill;
+                        }
+
+
+                        String cont = mapUtil.getTileAt(current).getContent();
+                        if (cont.equals("snakehead") && !((MapSnakeHead) mapUtil.getTileAt(current)).getName().equals(SNAKE_NAME)) {
+                            penalty += sneakHeadPenaltyInFloodFill;
+                        }
+                    }
+                }
+            }
+            depth ++;
+
+
+        }
+        return visited.size() - penalty;
+        /*
+
+
+
         this.floodedVisited = new HashMap();
         this.floodedPlayerId = playerID;
         this.floodedMapUtil = mapUtil;
@@ -228,6 +361,7 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
         floodedRec(utils.getNeighbor(current, SnakeDirection.UP),  1);
 
         return floodedVisited.size() - sneakHeadPenaltyInFloodFill;
+        */
     }
 
     private int floodedRec(MapCoordinate current,int depth){
@@ -257,9 +391,9 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
 
     }
 
-    public ArrayList<MapCoordinate> getLongestPathToTail(MapUpdateEvent mapUpdateEvent, MapUtil mapUtil){
+    public ArrayList<MapCoordinate> getLongestPathToSafePlace(MapUpdateEvent mapUpdateEvent, MapUtil mapUtil){
         MapCoordinate head = mapUtil.getMyPosition();
-        ArrayList<MapCoordinate> path = getShortestPathToTail(head, mapUtil,mapUpdateEvent,0,null,null);
+        ArrayList<MapCoordinate> path = getPathToSafePlace(mapUpdateEvent,mapUtil,head,0,null);// getShortestPathToTail(head, mapUtil,mapUpdateEvent,0,null,null);
         if(path == null){
             return null;
         }
@@ -321,11 +455,88 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
         return mapUtil.isTileAvailableForMovementTo(mapCoordinate) && (visited.get(mapCoordinate) == null || !visited.get(mapCoordinate));  //Detta kan ju lösas genom bara kolla om den contains
     }
 
+    private MapCoordinate safeSpot;
+
+    public ArrayList<MapCoordinate> huntTails(MapUtil mapUtil,  MapUpdateEvent mapUpdateEvent){
+        MapCoordinate current = mapUtil.getMyPosition();
+        SnakeInfo[] snakes = mapUpdateEvent.getMap().getSnakeInfos();
+
+        ArrayList<MapCoordinate> enemyTails = new ArrayList();
+       // int i = 0;
+        int[] temp;
+        for(SnakeInfo info : snakes){
+            if(!info.getName().equals(SNAKE_NAME) && info.getTailProtectedForGameTicks() < 1){ //TODO kolla protected sene gentligen när vi vet avståndet dit men detta får funka som en heuristic nu :)
+                temp = info.getPositions();
+                if(temp.length >0){
+                    enemyTails.add(mapUtil.translatePosition(temp[temp.length-1]));
+
+                }
+
+            }
+        }
+        ArrayList<ArrayList<MapCoordinate>> paths = new ArrayList<ArrayList<MapCoordinate>>();
+        int j = 0;
+        ArrayList<MapCoordinate> tempPath;
+        for(MapCoordinate tail : enemyTails){
+            ArrayList<MapCoordinate> allowedTiles = new ArrayList<>();
+            allowedTiles.add(tail);
+
+
+            tempPath =  astar.getPath(current,tail,mapUtil,maxHuntTailCost,0,null,allowedTiles,mapUpdateEvent.getReceivingPlayerId());
+
+
+            if(tempPath != null && tempPath.size()>1){
+                MapCoordinate[] snakeSpread = mapUtil.getSnakeSpread(mapUpdateEvent.getReceivingPlayerId());
+              //  ArrayList<MapCoordinate> allowedTiles = new ArrayList<>(Arrays.asList(snakeSpread)) ;// mapUtil.getSnakeSpread(mapUpdateEvent.getReceivingPlayerId()); TODO kanske funkar
+                int snakeSize = snakeSpread.length;
+                int futureSnakeSize = (snakeSize+tempPath.size())/2+1;
+                List<MapCoordinate> forbiddenTiles = null;
+                int pathIndex = tempPath.size()-futureSnakeSize;
+                forbiddenTiles = pathIndex < 1 ? tempPath :  tempPath.subList(tempPath.size()-futureSnakeSize, tempPath.size());
 
 
 
 
-    public SnakeDirection huntFood(MapUpdateEvent mapUpdateEvent, MapUtil mapUtil){
+                ArrayList shortestPathToSafePlace = getPathToSafePlace(mapUpdateEvent,mapUtil,current, tempPath.size(), forbiddenTiles);//, mapUtil, mapUpdateEvent, tempPath.size(), forbiddenTiles, null);
+
+
+                if(shortestPathToSafePlace != null && shortestPathToSafePlace.size() > 1) {
+                    paths.add(tempPath);
+                }else{
+                  ArrayList shortestPathToTail = getShortestPathToTail(current, mapUtil, mapUpdateEvent, tempPath.size(),forbiddenTiles, null);// getPathToSafePlace(mapUpdateEvent,mapUtil,current);
+                   if(shortestPathToTail != null && shortestPathToTail.size() > 1) {
+                        paths.add(tempPath);
+                    }
+                }
+
+                //Check if safe
+
+
+            }
+        }
+
+        Collections.sort(paths, new Comparator<ArrayList>() {
+            public int compare(ArrayList left, ArrayList right) {
+                return Integer.compare(left.size(), right.size());
+            }
+        });
+
+        for(ArrayList path : paths){
+            if(path != null){
+                return path;
+            }
+        }
+
+
+
+
+        return null;
+    }
+
+
+
+
+    public ArrayList<MapCoordinate> huntFood(MapUpdateEvent mapUpdateEvent, MapUtil mapUtil){
 
         //Lets find food
         ArrayList<MapCoordinate> foodTileList = new ArrayList<MapCoordinate>(Arrays.asList( mapUtil.listCoordinatesContainingFood()));
@@ -342,7 +553,7 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
 
                 ArrayList apath = astar.getPath(mapUtil.getMyPosition(), left, mapUtil, maxSelfFoodSearchCost, 0, null, null, mapUpdateEvent.getReceivingPlayerId());
                 ArrayList bpath = astar.getPath(mapUtil.getMyPosition(), right, mapUtil, maxSelfFoodSearchCost, 0, null, null, mapUpdateEvent.getReceivingPlayerId());
-
+    //TODO lol men spara alla paths innan!
                 int a = apath == null ? Integer.MAX_VALUE : apath.size();
                 int b = bpath == null ? Integer.MAX_VALUE : bpath.size();
 
@@ -382,6 +593,7 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
                 //Check if the other snakes can't reach it first
                 SnakeInfo[] snakeInfos = mapUpdateEvent.getMap().getSnakeInfos();
                 for (SnakeInfo snakeInfo : snakeInfos) {
+
                    if(snakeInfo.getName().equals(getName()) || snakeInfo.getPositions().length == 0){
                        break;
                    }
@@ -391,9 +603,7 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
                     if (otherPath != null && otherPath.size() <= path.size()) {
                         i.remove();
                     } else {
-                        MapCoordinate goTo = path.get(path.size()-2); //TODO var -2
-                        System.out.println("mat");
-                        return utils.getDirectionToNeighbor(current,goTo);
+                       return path;
                       //  int dY = goTo.y - current.y;
                       //  int dX = goTo.x - current.x;
 
@@ -456,6 +666,8 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
     public void onMapUpdate(MapUpdateEvent mapUpdateEvent) {
         long startTime = System.currentTimeMillis();
 
+        safeSpot = null;
+
 
 
         ansiPrinter.printMap(mapUpdateEvent);
@@ -463,20 +675,49 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
         // MapUtil contains lot's of useful methods for querying the map!
         MapUtil mapUtil = new MapUtil(mapUpdateEvent.getMap(), getPlayerId());
 
+        SnakeDirection  chosenDirection = null;
+        ArrayList<MapCoordinate> chosenPath;
+        ArrayList<MapCoordinate>  huntPath = huntTails(mapUtil, mapUpdateEvent);
+        ArrayList<MapCoordinate> foodPath = huntFood(mapUpdateEvent, mapUtil);
 
-        SnakeDirection  chosenDirection = huntTails(mapUtil);
-        if(chosenDirection == null){
-            chosenDirection = huntTails(mapUtil);
-        }
-        if(chosenDirection == null){
-           chosenDirection = huntFood(mapUpdateEvent, mapUtil);
-         //  if(chosenDirection!=null) System.out.println("Food: " + chosenDirection);
-        }
-        if(chosenDirection == null || !mapUtil.isTileAvailableForMovementTo(utils.getNeighbor(mapUtil.getMyPosition(),chosenDirection))){ //TODO varför är den dum ibland????
+        MapCoordinate current = mapUtil.getMyPosition();
 
-            chosenDirection = survive(mapUtil, mapUpdateEvent);
+        if(huntPath != null && huntPath.size() > 1){
+            if(foodPath != null && foodPath.size() > 1){
+                chosenPath = foodPath.size() * huntPreference < huntPath.size() ? foodPath : huntPath;
+                System.out.println(foodPath.size() * huntPreference <  huntPath.size() ? "Mat" : "Hunt");
+            } else {
+                chosenPath = huntPath;
+                System.out.println("Hunt");
+            }
+        } else{
+            if(foodPath != null && foodPath.size() > 1){
+                chosenPath = foodPath;
+                System.out.println("mat");
+            } else {
+                chosenPath = null;
+            }
+        }
+
+
+        if(chosenPath != null && chosenPath.size() >1 ){
+            MapCoordinate goTo = chosenPath.get(chosenPath.size()-2);
+            if(floodedSize(goTo,mapUtil,40) > 40){//TODO eller?
+                chosenDirection = utils.getDirectionToNeighbor(current,goTo);
+            }
+
+        }
+
+        MapCoordinate nextPos = utils.getNeighbor(mapUtil.getMyPosition(),chosenDirection);
+
+        if(chosenDirection == null || !isWalkable(nextPos, mapUtil, mapUpdateEvent)){ //TODO varför är den dum ibland????
+
+          chosenDirection = survive(mapUtil, mapUpdateEvent);
           //  System.out.println("Survive: " + chosenDirection);
         }
+
+
+       // chosenDirection = survive(mapUtil, mapUpdateEvent);
 
 
 
@@ -490,6 +731,30 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
 
       System.out.println("Tid: " + (System.currentTimeMillis() - startTime));
 
+      SnakeInfo[] snakeInfos = mapUpdateEvent.getMap().getSnakeInfos();
+        for(SnakeInfo si : snakeInfos){
+            if(si.getName().equals(SNAKE_NAME)){
+                System.out.println(si.getPoints());
+            }
+        }
+      System.out.println("");
+    }
+
+    private boolean isWalkable(MapCoordinate coord, MapUtil util, MapUpdateEvent mapUpdateEvent){
+        if(util.isTileAvailableForMovementTo(coord)){
+            return true;
+        }
+        if(util.getTileAt(coord).getContent().equals("snakebody") &&  (((MapSnakeBody) util.getTileAt(coord)).isTail())) {
+            SnakeInfo[] snakes = mapUpdateEvent.getMap().getSnakeInfos();
+            for (SnakeInfo info : snakes) {
+                if (info.getId().equals(((MapSnakeBody) util.getTileAt(coord)).getPlayerId()) && info.getTailProtectedForGameTicks() < 1) {
+                    return true;
+                }
+
+            }
+        }
+
+        return false;
     }
 
     public SnakeDirection getDirection(int dX, int dY){
