@@ -82,7 +82,7 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
     final int maxSelfFoodSearchCost = 40;
     final int maxPathToOwnTailCost = 60;
     final int maxOthersFoodSearchCost = 40;
-    final int maxPathExtensions = 800;
+    final int maxPathExtensions = 200;
     final int maxFloodDepth = 8;
     final int sneakHeadPenaltyInFloodFill = 0; //TODO implementera detta :)
     final int edgePenaltyInFloodFill = 0; //TODO testa detta :D
@@ -212,28 +212,34 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
         return chosenDirection;
     }
 
-    public int floodedSize(MapCoordinate start, MapUtil mapUtil, String playerID){
-        HashMap<MapCoordinate, Boolean> visited = new HashMap();
-        MapCoordinate current = start;
-        visited.put(current, true);
-        floodedRec(utils.getNeighbor(current, SnakeDirection.DOWN), mapUtil,  visited, 1, playerID);
-        floodedRec(utils.getNeighbor(current, SnakeDirection.RIGHT), mapUtil,  visited, 1, playerID);
-        floodedRec(utils.getNeighbor(current, SnakeDirection.LEFT), mapUtil,  visited, 1, playerID);
-        floodedRec(utils.getNeighbor(current, SnakeDirection.UP), mapUtil,  visited, 1, playerID);
+    private HashMap<MapCoordinate, Boolean> floodedVisited;
+    private String floodedPlayerId;
+    private MapUtil floodedMapUtil;
 
-        return visited.size() - sneakHeadPenaltyInFloodFill;
+    public int floodedSize(MapCoordinate start, MapUtil mapUtil, String playerID){
+        this.floodedVisited = new HashMap();
+        this.floodedPlayerId = playerID;
+        this.floodedMapUtil = mapUtil;
+        MapCoordinate current = start;
+        floodedVisited.put(current, true);
+        floodedRec(utils.getNeighbor(current, SnakeDirection.DOWN),1);
+        floodedRec(utils.getNeighbor(current, SnakeDirection.RIGHT),  1);
+        floodedRec(utils.getNeighbor(current, SnakeDirection.LEFT),  1);
+        floodedRec(utils.getNeighbor(current, SnakeDirection.UP),  1);
+
+        return floodedVisited.size() - sneakHeadPenaltyInFloodFill;
     }
 
-    private int floodedRec(MapCoordinate current, MapUtil mapUtil, HashMap<MapCoordinate, Boolean> visited, int depth, String playerID){
-        if(!utils.isWalkable(current,mapUtil,playerID,0,null,null)){
-            if(mapUtil.isCoordinateOutOfBounds(current)){
+    private int floodedRec(MapCoordinate current,int depth){
+        if(!utils.isWalkable(current,floodedMapUtil,floodedPlayerId,0,null,null)){
+            if(floodedMapUtil.isCoordinateOutOfBounds(current)){
                 return edgePenaltyInFloodFill;
             }
 
 
 
-            String cont = mapUtil.getTileAt(current).getContent();
-            if(cont.equals("snakehead") && !((MapSnakeHead) mapUtil.getTileAt(current)).getPlayerId().equals(playerID)   ){
+            String cont = floodedMapUtil.getTileAt(current).getContent();
+            if(cont.equals("snakehead") && !((MapSnakeHead) floodedMapUtil.getTileAt(current)).getPlayerId().equals(floodedPlayerId)   ){
                 return sneakHeadPenaltyInFloodFill;
             }
 
@@ -242,11 +248,11 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
         if(depth > maxFloodDepth){
             return 0;
         }
-        visited.put(current, true);
-        floodedRec(utils.getNeighbor(current, SnakeDirection.DOWN), mapUtil,  visited, depth+1, playerID);
-        floodedRec(utils.getNeighbor(current, SnakeDirection.RIGHT), mapUtil,  visited, depth+1, playerID);
-        floodedRec(utils.getNeighbor(current, SnakeDirection.LEFT), mapUtil,  visited, depth+1, playerID);
-        floodedRec(utils.getNeighbor(current, SnakeDirection.UP), mapUtil,  visited, depth+1, playerID);
+        floodedVisited.put(current, true);
+        floodedRec(utils.getNeighbor(current, SnakeDirection.DOWN),depth+1);
+        floodedRec(utils.getNeighbor(current, SnakeDirection.RIGHT), depth+1);
+        floodedRec(utils.getNeighbor(current, SnakeDirection.LEFT), depth+1);
+        floodedRec(utils.getNeighbor(current, SnakeDirection.UP), depth+1);
         return 0;
 
     }
@@ -291,7 +297,7 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
                         ){
                     visited.put(currentTest, true);
                     visited.put(nextTest, true);
-                    path.add(index, currentTest);
+                    path.add(index+1, currentTest);
                     path.add(index +2, nextTest);
                     extended = true;
                     extensions++;
@@ -482,7 +488,7 @@ public class SimpleSnakePlayer extends BaseSnakeClient {
        // MapCoordinate[] snake = mapUtil.getSnakeSpread(myId);
        // lastTailCoordinate = snake[snake.length-1];
 
-      //System.out.println("Tid: " + (System.currentTimeMillis() - startTime));
+      System.out.println("Tid: " + (System.currentTimeMillis() - startTime));
 
     }
 
