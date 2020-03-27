@@ -1,4 +1,4 @@
-This aggressive little snake finished second in Cygni's snake competition 2018. The code is written in standard hackathonesque, that is, pretty ugly but working. The snake tries to bite any other snake that comes too close, searches for food if there's something nearby, and otherwise just tries to stall for time by finding the longest possible route.
+This aggressive little snake finished second in the Cygni SnakeBot Challenge 2018. The code is written in standard hackathonesque, that is, pretty ugly but working. The snake tries to bite any other snake that comes too close, searches for food if there's something nearby, and otherwise just tries to stall for time by finding the longest possible route.
 
 # Original readme from Cygni
 [![Build Status](http://jenkins.snake.cygni.se/buildStatus/icon?job=snake client java)](http://jenkins.snake.cygni.se/job/snake%20client%20java/)
